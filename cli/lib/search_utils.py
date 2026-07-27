@@ -4,6 +4,7 @@ from nltk.stem import PorterStemmer
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 DATA_PATH = os.path.join(PROJECT_ROOT, "data", "movies.json")
 STOPWORDS_PATH = os.path.join(PROJECT_ROOT, "data", "stopwords.txt")
+CACHE_PATH = os.path.join(PROJECT_ROOT, "cache")
 
 def remove_symbols(s: str) -> str:
     symbol_trans = str.maketrans({c: '' for c in string.punctuation})

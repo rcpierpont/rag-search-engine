@@ -1,5 +1,6 @@
 import argparse
 from lib.keyword_search import search_command
+from lib.build import build_command
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Keyword Search CLI")
@@ -17,6 +18,11 @@ def main() -> None:
             for i, result in enumerate(results, 1):
                 print(f"{i}. {result['title']}")
             pass
+        case "build":
+            doc_index = build_command()
+            docs = doc_index.index['merida']
+            print(f"First document for token 'merida' = {docs[0]}")
+
         case _:
             parser.print_help()
 
