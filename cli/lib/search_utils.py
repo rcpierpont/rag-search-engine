@@ -1,41 +1,88 @@
-import json, os, string
-from nltk.stem import PorterStemmer
+import json
+import os
+from typing import Any, TypedDict
+
+
+class Movie(TypedDict):
+    id: int
+    title: str
+    description: str
+
+
+class SearchResult(TypedDict):
+    id: int
+    title: str
+    document: str
+    score: float
+    metadata: dict[str, Any]
+
+
+class GoldenTestCase(TypedDict):
+    query: str
+    relevant_docs: list[str]
+
+
+class GoldenDataset(TypedDict):
+    test_cases: list[GoldenTestCase]
+
+
+DEFAULT_ALPHA = 0.5
+RRF_K = 60
+SEARCH_MULTIPLIER = 5
+
+DEFAULT_SEARCH_LIMIT = 5
+DOCUMENT_PREVIEW_LENGTH = 100
+SCORE_PRECISION = 3
+
+BM25_K1 = 1.5
+BM25_B = 0.75
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 DATA_PATH = os.path.join(PROJECT_ROOT, "data", "movies.json")
 STOPWORDS_PATH = os.path.join(PROJECT_ROOT, "data", "stopwords.txt")
-CACHE_PATH = os.path.join(PROJECT_ROOT, "cache")
+GOLDEN_DATASET_PATH = os.path.join(PROJECT_ROOT, "data", "golden_dataset.json")
 
-def remove_symbols(s: str) -> str:
-    symbol_trans = str.maketrans({c: '' for c in string.punctuation})
-    return s.translate(symbol_trans)
+CACHE_DIR = os.path.join(PROJECT_ROOT, "cache")
 
-def sanitize_str(s: str) -> str:
-    sanitized_s = s.lower()
-    sanitized_s = remove_symbols(sanitized_s)
-    return sanitized_s
+DEFAULT_CHUNK_SIZE = 200
+DEFAULT_CHUNK_OVERLAP = 1
+DEFAULT_SEMANTIC_CHUNK_SIZE = 4
 
-def load_stopwords() -> list[str]:
-    with open(STOPWORDS_PATH, "r") as f:
-        return [sanitize_str(word) for word in f.read().splitlines()]
+MOVIE_EMBEDDINGS_PATH = os.path.join(CACHE_DIR, "movie_embeddings.npy")
+CHUNK_EMBEDDINGS_PATH = os.path.join(CACHE_DIR, "chunk_embeddings.npy")
+CHUNK_METADATA_PATH = os.path.join(CACHE_DIR, "chunk_metadata.json")
 
-STOPWORDS = load_stopwords()
 
-def load_movies() -> list:
+def load_movies() -> list[Movie]:
     with open(DATA_PATH, "r") as f:
         data = json.load(f)
     return data["movies"]
 
-def remove_stopwords(tokens: list[str]) -> list[str]:
-    tokens_cleaned = []
-    for token in tokens:
-        if token in STOPWORDS:
-            continue
-        tokens_cleaned.append(token)
-    return tokens_cleaned
 
-def stem_tokens(tokens: list[str]) -> list[str]:
-    stemmer = PorterStemmer()
-    for i, token in enumerate(tokens):
-        tokens[i] = stemmer.stem(token)
-    return tokens
+def format_search_result(
+    doc_id: int, title: str, document: str, score: float, **metadata: Any
+) -> SearchResult:
+    """Create standardized search result
+
+    Args:
+        doc_id: Document ID
+        title: Document title
+        document: Display text (usually short description)
+        score: Relevance/similarity score
+        **metadata: Additional metadata to include
+
+    Returns:
+        Dictionary representation of search result
+    """
+    return {
+        "id": doc_id,
+        "title": title,
+        "document": document,
+        "score": round(score, SCORE_PRECISION),
+        "metadata": metadata if metadata else {},
+    }
+
+
+def load_golden_dataset() -> GoldenDataset:
+    with open(GOLDEN_DATASET_PATH, "r") as f:
+        return json.load(f)

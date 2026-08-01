@@ -1,31 +1,151 @@
-from .search_utils import load_movies, sanitize_str, remove_stopwords, stem_tokens
+import os
+import pickle
+import string
+from collections import defaultdict,Counter
 
-DEFAULT_SEARCH_LIMIT=5
+from nltk.stem import PorterStemmer
+
+from .search_utils import (
+    CACHE_DIR,
+    DEFAULT_SEARCH_LIMIT,
+    STOPWORDS_PATH,
+    load_movies,
+)
+
+
+class InvertedIndex:
+    def __init__(self) -> None:
+        self.index = defaultdict(set)
+        self.docmap: dict[int, dict] = {}
+        self.index_path = os.path.join(CACHE_DIR, "index.pkl")
+        self.docmap_path = os.path.join(CACHE_DIR, "docmap.pkl")
+        self.term_frequencies_path = os.path.join(CACHE_DIR, "term_frequencies.pkl")
+        self.term_frequencies: dict[int, Counter] = {}
+
+    def build(self) -> None:
+        movies = load_movies()
+        for m in movies:
+            doc_id = m["id"]
+            doc_description = f"{m['title']} {m['description']}"
+            self.docmap[doc_id] = m
+            self.__add_document(doc_id, doc_description)
+
+    def save(self) -> None:
+        os.makedirs(CACHE_DIR, exist_ok=True)
+        with open(self.index_path, "wb") as f:
+            pickle.dump(self.index, f)
+        with open(self.docmap_path, "wb") as f:
+            pickle.dump(self.docmap, f)
+        with open(self.term_frequencies_path, "wb") as f:
+            pickle.dump(self.term_frequencies, f)
+
+    def get_documents(self, term: str) -> list[int]:
+        doc_ids = self.index.get(term, set())
+        return sorted(list(doc_ids))
+
+    def __add_document(self, doc_id: int, text: str) -> None:
+        tokens = tokenize_text(text)
+        self.term_frequencies[doc_id] = Counter(tokens)
+        for token in set(tokens):
+            self.index[token].add(doc_id)
+
+    def get_tf(self, doc_id, term) -> int:
+        if term in self.term_frequencies[doc_id]:
+            return self.term_frequencies[doc_id][term]
+        return 0
+
+    def load(self) -> None:
+        with open(self.index_path, "rb") as f:
+            self.index = pickle.load(f)
+        with open(self.docmap_path, "rb") as f:
+            self.docmap = pickle.load(f)
+        with open(self.term_frequencies_path, "rb") as f:
+            self.term_frequencies = pickle.load(f)
+
+def build_command() -> None:
+    idx = InvertedIndex()
+    idx.build()
+    idx.save()
+
 
 def search_command(query: str, limit: int = DEFAULT_SEARCH_LIMIT) -> list[dict]:
-    movies = load_movies()
+    movie_index = InvertedIndex()
+    movie_index.load()
+    if len(movie_index.index) == 0:
+        print("movie index not found")
+        return []
+    with open('debug_index.txt', 'w') as f:
+        for k,v in movie_index.index.items():
+            f.write(f"k: {k}, v{v}\n")
+    with open('debug_docmap.txt', 'w') as f:
+        for k,v in movie_index.docmap.items():
+            f.write(f"k: {k}, v{v}\n")
     results = []
-    for movie in movies:
-        tokens_q = preprocess(query)
-        tokens_r = preprocess(movie['title'])
-        if has_match(tokens_q, tokens_r):
-            results.append(movie)
-            if len(results) >= limit:
-                break
+    query_tokens = tokenize_text(query)
+    for token in query_tokens:
+        if token in movie_index.index:
+            for doc_id in movie_index.get_documents(token):
+                if len(results) < DEFAULT_SEARCH_LIMIT:
+                    results.append(movie_index.docmap[doc_id])
+                    continue
+                return results
     return results
 
-def has_match(q: list[str], r: list[str]) -> bool:
-    for token in q:
-        if token in ' '.join(r):
-            return True
+def tf_command(doc_id, term) -> int:
+    test_stemmer = PorterStemmer()
+    stemmed_words = []
+    for word in ['trapper', 'trappers']:
+        stemmed_words.append(test_stemmer.stem(word))
+    for stemmed_word in stemmed_words:
+        print(f'stemmed word: {stemmed_word}')
+    movie_index = InvertedIndex()
+    movie_index.load()
+    print(movie_index.term_frequencies[424]['trappers'])
+    token = tokenize_single_term(term)
+    return movie_index.get_tf(doc_id, token)
+
+
+def has_matching_token(query_tokens: list[str], title_tokens: list[str]) -> bool:
+    for query_token in query_tokens:
+        for title_token in title_tokens:
+            if query_token in title_token:
+                return True
     return False
 
-def tokenize_str(s: str) -> list[str]:
-    return s.split()
 
-def preprocess(s: str) -> list[str]:
-    sanitized_str = sanitize_str(s)
-    tokens = tokenize_str(sanitized_str)
-    tokens = remove_stopwords(tokens)
-    tokens = stem_tokens(tokens)
-    return tokens
+def preprocess_text(text: str) -> str:
+    text = text.lower()
+    text = text.translate(str.maketrans("", "", string.punctuation))
+    return text
+
+
+def load_stopwords() -> list[str]:
+    with open(STOPWORDS_PATH, "r") as f:
+        return [preprocess_text(word) for word in f.read().splitlines()]
+
+
+STOPWORDS = load_stopwords()
+
+def tokenize_single_term(text: str) -> str:
+    token = tokenize_text(text)
+    if len(token) != 1:
+        raise Exception("single term contains multiple tokens")
+    print(token)
+    return ''.join(token)    
+
+def tokenize_text(text: str) -> list[str]:
+    text = preprocess_text(text)
+    tokens = text.split()
+    valid_tokens = []
+    for token in tokens:
+        if token:
+            valid_tokens.append(token)
+    filtered_words = []
+    for word in valid_tokens:
+        if word not in STOPWORDS:
+            filtered_words.append(word)
+    stemmer = PorterStemmer()
+    stemmed_words = []
+    for word in filtered_words:
+        stemmed_words.append(stemmer.stem(word))
+    return stemmed_words
