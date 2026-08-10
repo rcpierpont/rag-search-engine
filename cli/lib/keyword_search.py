@@ -1,6 +1,4 @@
-import os
-import pickle
-import string
+import os,pickle,string,math
 from collections import defaultdict,Counter
 
 from nltk.stem import PorterStemmer
@@ -54,6 +52,12 @@ class InvertedIndex:
             return self.term_frequencies[doc_id][term]
         return 0
 
+    def get_idf(self, term) -> float:
+        return math.log((len(self.docmap) + 1) / (len(self.get_documents(term)) + 1))
+
+    def get_tfidf(self, doc_id, term) -> float:
+        return self.get_tf(doc_id, term) * self.get_idf(term)
+
     def load(self) -> None:
         with open(self.index_path, "rb") as f:
             self.index = pickle.load(f)
@@ -92,18 +96,22 @@ def search_command(query: str, limit: int = DEFAULT_SEARCH_LIMIT) -> list[dict]:
     return results
 
 def tf_command(doc_id, term) -> int:
-    test_stemmer = PorterStemmer()
-    stemmed_words = []
-    for word in ['trapper', 'trappers']:
-        stemmed_words.append(test_stemmer.stem(word))
-    for stemmed_word in stemmed_words:
-        print(f'stemmed word: {stemmed_word}')
     movie_index = InvertedIndex()
     movie_index.load()
-    print(movie_index.term_frequencies[424]['trappers'])
     token = tokenize_single_term(term)
     return movie_index.get_tf(doc_id, token)
 
+def idf_command(term) -> float:
+    movie_index = InvertedIndex()
+    movie_index.load()
+    token = tokenize_single_term(term)
+    return movie_index.get_idf(token)
+
+def tfidf_command(doc_id, term) -> float:
+    movie_index = InvertedIndex()
+    movie_index.load()
+    token = tokenize_single_term(term)
+    return movie_index.get_tfidf(doc_id, token)
 
 def has_matching_token(query_tokens: list[str], title_tokens: list[str]) -> bool:
     for query_token in query_tokens:
@@ -112,12 +120,10 @@ def has_matching_token(query_tokens: list[str], title_tokens: list[str]) -> bool
                 return True
     return False
 
-
 def preprocess_text(text: str) -> str:
     text = text.lower()
     text = text.translate(str.maketrans("", "", string.punctuation))
     return text
-
 
 def load_stopwords() -> list[str]:
     with open(STOPWORDS_PATH, "r") as f:

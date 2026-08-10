@@ -1,6 +1,5 @@
 import argparse
-
-from lib.keyword_search import build_command, search_command, tf_command
+from lib.keyword_search import build_command, search_command, tf_command, idf_command, tfidf_command
 
 
 def main() -> None:
@@ -12,9 +11,16 @@ def main() -> None:
     search_parser = subparsers.add_parser("search", help="Search movies using BM25")
     search_parser.add_argument("query", type=str, help="Search query")
 
-    tf_parser = subparsers.add_parser("tf", help="prints term frequency for given term in given document ID")
-    tf_parser.add_argument("id", type=int, help="document id")
+    tf_parser = subparsers.add_parser("tf", help="prints term frequency for given term and document ID")
+    tf_parser.add_argument("doc_id", type=int, help="document id")
     tf_parser.add_argument("term", type=str, help="term to search in document with given id")
+
+    idf_parser = subparsers.add_parser("idf", help="prints inverse document frequency for given term")
+    idf_parser.add_argument("term", type=str, help="term to search for across all documents")
+
+    tfidf_parser = subparsers.add_parser("tfidf", help="prints tfidf score for given term and document ID")
+    tfidf_parser.add_argument("doc_id", type=int, help="document id")
+    tfidf_parser.add_argument("term", type=str, help="term to search in document with given id")
 
     args = parser.parse_args()
 
@@ -30,8 +36,17 @@ def main() -> None:
                 print(f"{i}. ({result['id']}) {result['title']}")
         case "tf":
             print("Checking term frequency...")
-            frequency = tf_command(args.id, args.term)
-            print(f"{args.term} appears {frequency} time(s) in doc {args.id}")
+            frequency = tf_command(args.doc_id, args.term)
+            print(f"{args.term} appears {frequency} time(s) in doc {args.doc_id}")
+        case "idf":
+            print("Checking idf score...")
+            idf = idf_command(args.term)
+            print(f"Inverse document frequency of '{args.term}': {idf:.2f}")
+        case "tfidf":
+            print("Checking TF-IDF score...")
+            tf_idf = tfidf_command(args.doc_id, args.term)
+            print(f"TF-IDF score of '{args.term}' in document '{args.doc_id}': {tf_idf:.2f}")
+
 
         case _:
             parser.print_help()
