@@ -58,6 +58,12 @@ class InvertedIndex:
     def get_tfidf(self, doc_id, term) -> float:
         return self.get_tf(doc_id, term) * self.get_idf(term)
 
+    # log((N - df + 0.5) / (df + 0.5) + 1), where N is the total number of documents and df is the document frequency
+    def get_bm25_idf(self, term: str) -> float:
+        n = len(self.docmap)
+        df = len(self.get_documents(term))
+        return math.log((n - df + 0.5) / (df + 0.5) + 1)
+
     def load(self) -> None:
         with open(self.index_path, "rb") as f:
             self.index = pickle.load(f)
@@ -113,6 +119,12 @@ def tfidf_command(doc_id, term) -> float:
     token = tokenize_single_term(term)
     return movie_index.get_tfidf(doc_id, token)
 
+def bm25_idf_command(term) -> float:
+    movie_index = InvertedIndex()
+    movie_index.load()
+    token = tokenize_single_term(term)
+    return movie_index.get_bm25_idf(token)
+
 def has_matching_token(query_tokens: list[str], title_tokens: list[str]) -> bool:
     for query_token in query_tokens:
         for title_token in title_tokens:
@@ -136,7 +148,6 @@ def tokenize_single_term(text: str) -> str:
     token = tokenize_text(text)
     if len(token) != 1:
         raise Exception("single term contains multiple tokens")
-    print(token)
     return ''.join(token)    
 
 def tokenize_text(text: str) -> list[str]:
