@@ -7,6 +7,8 @@ from .search_utils import (
     CACHE_DIR,
     DEFAULT_SEARCH_LIMIT,
     STOPWORDS_PATH,
+    BM25_K1,
+    BM25_B,
     load_movies,
 )
 
@@ -19,6 +21,8 @@ class InvertedIndex:
         self.docmap_path = os.path.join(CACHE_DIR, "docmap.pkl")
         self.term_frequencies_path = os.path.join(CACHE_DIR, "term_frequencies.pkl")
         self.term_frequencies: dict[int, Counter] = {}
+        self.doc_lengths: dict[int, int] = {}
+        self.doc_lengths_path = os.path.join(CACHE_DIR, "doc_lengths.pkl")
 
     def build(self) -> None:
         movies = load_movies()
@@ -36,16 +40,22 @@ class InvertedIndex:
             pickle.dump(self.docmap, f)
         with open(self.term_frequencies_path, "wb") as f:
             pickle.dump(self.term_frequencies, f)
+        with open(self.doc_lengths_path, "wb") as f:
+            pickle.dump(self.doc_lengths, f)
+
+    def load(self) -> None:
+        with open(self.index_path, "rb") as f:
+            self.index = pickle.load(f)
+        with open(self.docmap_path, "rb") as f:
+            self.docmap = pickle.load(f)
+        with open(self.term_frequencies_path, "rb") as f:
+            self.term_frequencies = pickle.load(f)
+        with open(self.doc_lengths_path, "rb") as f:
+            self.doc_lengths = pickle.load(f)
 
     def get_documents(self, term: str) -> list[int]:
         doc_ids = self.index.get(term, set())
         return sorted(list(doc_ids))
-
-    def __add_document(self, doc_id: int, text: str) -> None:
-        tokens = tokenize_text(text)
-        self.term_frequencies[doc_id] = Counter(tokens)
-        for token in set(tokens):
-            self.index[token].add(doc_id)
 
     def get_tf(self, doc_id, term) -> int:
         if term in self.term_frequencies[doc_id]:
@@ -59,18 +69,39 @@ class InvertedIndex:
         return self.get_tf(doc_id, term) * self.get_idf(term)
 
     # log((N - df + 0.5) / (df + 0.5) + 1), where N is the total number of documents and df is the document frequency
-    def get_bm25_idf(self, term: str) -> float:
+    def get_bm25_idf(self, term) -> float:
         n = len(self.docmap)
         df = len(self.get_documents(term))
         return math.log((n - df + 0.5) / (df + 0.5) + 1)
 
-    def load(self) -> None:
-        with open(self.index_path, "rb") as f:
-            self.index = pickle.load(f)
-        with open(self.docmap_path, "rb") as f:
-            self.docmap = pickle.load(f)
-        with open(self.term_frequencies_path, "rb") as f:
-            self.term_frequencies = pickle.load(f)
+    # Length normalization factor
+    # length_norm = 1 - b + b * (doc_length / avg_doc_length)
+    #
+    # Apply to term frequency
+    # tf_component = (tf * (k1 + 1)) / (tf + k1 * length_norm)
+    def get_bm25_tf(self, doc_id, term, k1=BM25_K1, b=BM25_B) -> float:
+        tf = self.get_tf(doc_id, term)
+        doc_len = self.doc_lengths[doc_id]
+        len_norm = (1 - b) + (b * (doc_len / self.__get_avg_doc_length()))
+        return (tf * (k1 + 1)) / (tf + (k1 * len_norm))
+    
+    def __add_document(self, doc_id: int, text: str) -> None:
+        tokens = tokenize_text(text)
+        self.term_frequencies[doc_id] = Counter(tokens)
+        self.doc_lengths[doc_id] = len(tokens)
+        for token in set(tokens):
+            self.index[token].add(doc_id)
+
+    def __get_avg_doc_length(self) -> float:
+        if len(self.doc_lengths) == 0:
+            return 0.0
+        len_sum = 0.0
+        num_docs = len(self.doc_lengths)
+        for doc_id in self.doc_lengths:
+            len_sum += self.doc_lengths[doc_id]
+        return len_sum / num_docs
+
+    
 
 def build_command() -> None:
     idx = InvertedIndex()
@@ -124,6 +155,12 @@ def bm25_idf_command(term) -> float:
     movie_index.load()
     token = tokenize_single_term(term)
     return movie_index.get_bm25_idf(token)
+
+def bm25_tf_command(doc_id, term, k1=BM25_K1, b=BM25_B) -> float:
+    movie_index = InvertedIndex()
+    movie_index.load()
+    token = tokenize_single_term(term)
+    return movie_index.get_bm25_tf(doc_id, token, k1=k1, b=b)
 
 def has_matching_token(query_tokens: list[str], title_tokens: list[str]) -> bool:
     for query_token in query_tokens:
