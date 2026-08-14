@@ -1,6 +1,6 @@
 import argparse
-from lib.keyword_search import build_command, search_command, tf_command, idf_command, tfidf_command, bm25_idf_command, bm25_tf_command
-from lib.search_utils import BM25_K1, BM25_B
+from lib.keyword_search import build_command, search_command, tf_command, idf_command, tfidf_command, bm25_idf_command, bm25_tf_command, bm25search_command
+from lib.search_utils import BM25_K1, BM25_B, DEFAULT_SEARCH_LIMIT
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Keyword Search CLI")
@@ -39,6 +39,14 @@ def main() -> None:
         help="Tunable BM25 b parameter",
     )
 
+    bm25search_parser = subparsers.add_parser("bm25search", help="Search movies using full BM25 scoring")
+    bm25search_parser.add_argument("query", type=str, help="Search query")
+    bm25search_parser.add_argument(
+        "limit", type=int, nargs="?", 
+        default=DEFAULT_SEARCH_LIMIT, 
+        help="Max number of search results",
+    )
+
     args = parser.parse_args()
 
     match args.command:
@@ -71,6 +79,11 @@ def main() -> None:
             print("Checking BM25 TF score...")
             bm25tf = bm25_tf_command(args.doc_id, args.term)
             print(f"BM25 TF score of '{args.term}' in document '{args.doc_id}': {bm25tf:.2f}")
+        case "bm25search":
+            print(f"Fetching top {args.limit} movies based on BM25 score...")
+            bm25_results = bm25search_command(args.query, args.limit)
+            for i, result in enumerate(bm25_results, 1):
+                print(f"{i}. ({result['id']}) {result['title']} - Score: {result['score']:.2f}")
         case _:
             parser.print_help()
 
