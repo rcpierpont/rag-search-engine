@@ -6,6 +6,7 @@ from nltk.stem import PorterStemmer
 from .search_utils import (
     CACHE_DIR,
     DEFAULT_SEARCH_LIMIT,
+    DOCUMENT_PREVIEW_LENGTH,
     STOPWORDS_PATH,
     BM25_K1,
     BM25_B,
@@ -112,7 +113,7 @@ class InvertedIndex:
             formatted_result = format_search_result(
                 doc_id=doc["id"],
                 title=doc["title"],
-                document=doc["description"],
+                document=doc["description"][:DOCUMENT_PREVIEW_LENGTH],
                 score=score,
             )
             results.append(formatted_result)
